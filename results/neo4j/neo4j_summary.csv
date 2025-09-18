@@ -1,0 +1,6 @@
+timestamp,query_name,runs,avg_ms,stdev_ms,min_ms,max_ms,rows_last
+2025-09-17 14:26:19,top_movies_avg_min50,10,37.1656,6.0875,31.5116,50.5940,450
+2025-09-17 14:26:19,recs_by_similar_users_uid42_mincommon10,10,98.4402,15.9020,87.6211,135.7326,5732
+2025-09-17 14:26:19,fof_recs_uid42_depth3_scifi,10,1073.9697,15.7162,1053.9392,1102.5892,50
+2025-09-17 14:26:19,count_how_many_users_vote_>=4_a_couple_of_film,10,6123.4157,126.9527,5795.9510,6217.8820,847
+2025-09-17 14:26:19,movie_pairs_common_raters,10,79143.6678,1121.6470,76685.6682,80837.3253,1293963

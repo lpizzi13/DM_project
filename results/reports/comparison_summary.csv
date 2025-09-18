@@ -1,0 +1,6 @@
+query,status,mysql_rows,neo4j_rows,only_in_mysql,only_in_neo4j,details
+count_how_many_users_vote_>=4_a_couple_of_film,equal,847,847,0,0,Diff saved to diff_count_how_many_users_vote_>=4_a_couple_of_film.csv
+fof_recs_uid42_depth3_scifi,equal,50,50,0,0,Diff saved to diff_fof_recs_uid42_depth3_scifi.csv
+movie_pairs_common_raters,equal,1293963,1293963,0,0,Diff saved to diff_movie_pairs_common_raters.csv
+recs_by_similar_users_uid42_mincommon10,equal,5732,5732,0,0,Diff saved to diff_recs_by_similar_users_uid42_mincommon10.csv
+top_movies_avg_min50,equal,450,450,0,0,Diff saved to diff_top_movies_avg_min50.csv
