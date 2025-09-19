@@ -1,11 +1,4 @@
-# from MySql import mainMySql
-# from Neo4j import mainNeo4j
-
-# if __name__ == "__main__":
-#     mainMySql()
-#     mainNeo4j()
-
-import argparse
+import argparse,shutil
 import csv
 import math
 import subprocess
@@ -13,30 +6,8 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Tuple, Set, Any
 from GeneraGrafici import plot_graphs
-
-# --- Config ---
-RESULTS_ROOT = Path("results_with_indexes")
-MYSQL_DIR = RESULTS_ROOT / "MySql"
-NEO4J_DIR = RESULTS_ROOT / "Neo4j"
-REPORTS_DIR = RESULTS_ROOT / "reports"
-REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-
-# Tolleranza per i float (per es.: differenze di arrotondamento tra engine)
-FLOAT_EPS = 1e-4
-
-
-def run_benchmarks(python_exec: str = sys.executable) -> None:
-    """Lancia i due benchmark e verifica exit code."""
-    print("▶️ Running MySQL benchmark…")
-    r1 = subprocess.run([python_exec, "MySql.py"])
-    if r1.returncode != 0:
-        sys.exit("MySQL benchmark failed")
-
-    print("▶️ Running Neo4j benchmark…")
-    r2 = subprocess.run([python_exec, "Neo4j.py"])
-    if r2.returncode != 0:
-        sys.exit("Neo4j benchmark failed")
-
+from MySql import mainMySql
+from Neo4j import mainNeo4j
 
 def _to_number_or_str(v: str) -> Any:
     """Prova a convertire in int/float; altrimenti stringa invariata."""
@@ -96,7 +67,7 @@ def rows_to_keyset(rows: List[Dict[str, Any]], columns: List[str]) -> Set[Tuple]
     return keyset
 
 
-def compare_two_csv(mysql_csv: Path, neo4j_csv: Path) -> Dict[str, Any]:
+def compare_two_csv(mysql_csv: Path, neo4j_csv: Path,REPORTS_DIR) -> Dict[str, Any]:
     """Confronta due risultati (stesse colonne in comune)."""
     mh, mr = load_table(mysql_csv)
     nh, nr = load_table(neo4j_csv)
@@ -142,7 +113,7 @@ def compare_two_csv(mysql_csv: Path, neo4j_csv: Path) -> Dict[str, Any]:
     }
 
 
-def find_common_query_files() -> List[Tuple[Path, Path]]:
+def find_common_query_files(MYSQL_DIR,NEO4J_DIR) -> List[Tuple[Path, Path]]:
     """Trova le coppie di file risultato con lo stesso nome in mysql/ e neo4j/."""
     mysql_files = {p.stem: p for p in MYSQL_DIR.glob("*.csv")}
     neo4j_files = {p.stem: p for p in NEO4J_DIR.glob("*.csv")}
@@ -150,7 +121,7 @@ def find_common_query_files() -> List[Tuple[Path, Path]]:
     return [(mysql_files[name], neo4j_files[name]) for name in common]
 
 
-def write_summary_report(results: List[Dict[str, Any]]) -> Path:
+def write_summary_report(results: List[Dict[str, Any]],REPORTS_DIR) -> Path:
     out = REPORTS_DIR / "comparison_summary.csv"
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
@@ -182,19 +153,34 @@ def write_summary_report(results: List[Dict[str, Any]]) -> Path:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run benchmarks (optional) and compare last-run query results between MySQL and Neo4j."
+    description="Run benchmarks and compare last-run query results between MySQL and Neo4j."
     )
-    parser.add_argument(
-        "--run",
-        action="store_true",
-        help="Run mysql.py and neo4j.py before comparing.",
-    )
+    parser.add_argument("--run", action="store_true", help="Run mysql.py and neo4j.py before comparing.")
+    parser.add_argument("--use_index", action="store_true", help="Usa gli indici e salva in result_with_indexes/")
     args = parser.parse_args()
 
-    if args.run:
-        run_benchmarks()
+    # Root dinamico
+    use_indexes = args.use_index
+    RESULTS_ROOT = Path("results_with_indexes") if args.use_index else Path("results")
+    MYSQL_DIR = RESULTS_ROOT / "MySql"
+    NEO4J_DIR = RESULTS_ROOT / "Neo4j"
+    REPORTS_DIR = RESULTS_ROOT / "reports"
+    PLOTS_DIR = RESULTS_ROOT / "plots"
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    for folder in [MYSQL_DIR, NEO4J_DIR, REPORTS_DIR,PLOTS_DIR]:
+        folder.mkdir(parents=True, exist_ok=True)
+        # Elimina tutti i file all'interno
+        for f in folder.iterdir():
+            if f.is_file():
+                f.unlink()
+            elif f.is_dir():
+                shutil.rmtree(f)
 
-    pairs = find_common_query_files()
+    if args.run:
+        mainMySql(RESULTS_ROOT,use_indexes)
+        mainNeo4j(RESULTS_ROOT,use_indexes)
+
+    pairs = find_common_query_files(MYSQL_DIR,NEO4J_DIR)
     if not pairs:
         sys.exit(
             f"No common result files found in {MYSQL_DIR} and {NEO4J_DIR}. Make sure both scripts saved CSVs with the same base names."
@@ -203,7 +189,7 @@ def main():
     results = []
     print("▶️ Comparing results…")
     for mfile, nfile in pairs:
-        r = compare_two_csv(mfile, nfile)
+        r = compare_two_csv(mfile, nfile,REPORTS_DIR)
         results.append(r)
         status_icon = "✅" if r["status"] == "equal" else "❌"
         print(
@@ -212,10 +198,10 @@ def main():
             f"only_mysql={r['only_mysql']}, only_neo4j={r['only_neo4j']})"
         )
 
-    summary_path = write_summary_report(results)
+    summary_path = write_summary_report(results,REPORTS_DIR)
     print(f"\n📄 Summary written to {summary_path}")
     print(f"📄 Per-query diffs written to {REPORTS_DIR}/diff_*.csv")
-    plot_graphs()
+    plot_graphs(RESULTS_ROOT)
 
 if __name__ == "__main__":
     main()

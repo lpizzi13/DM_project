@@ -22,8 +22,6 @@ CONFIG = {
 REPEATS = 10 # numero di misure per query
 WARMUP_RUNS = 1        # esecuzioni di warm-up per query (scartate)
 OUTPUT_PREFIX = "mysql"  # prefisso file csv
-RESULTS_DIR = Path("results_with_indexes/mysql")
-RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ------------------------------
 # Definizione delle query
@@ -133,7 +131,7 @@ QUERIES = [
         "params": (42, 42, 42, 42),
     },
     {
-        "name": "count_how_many_users_vote_>=4_a_couple_of_film",
+        "name": "count_how_many_users_vote_greather_than_4_a_couple_of_film",
         "sql": """
             WITH params AS (
             SELECT 828124615 AS sinceSec, 1537799250 AS untilSec
@@ -192,9 +190,26 @@ indexes_mysql = {
     ]
 }
 
-# ------------------------------
-# Aux
-# ------------------------------
+def apply_mysql_indexes(cursor,use_indexes):
+    for table, stmts in indexes_mysql.items():
+        for stmt in stmts:
+            if use_indexes:
+                cursor.execute(stmt)
+            else:
+                # Estraggo nome indice e tabella
+                parts = stmt.split()
+                if len(parts) >= 5 and parts[0].upper() == "CREATE" and parts[1].upper() == "INDEX":
+                    index_name = parts[2]
+                    table_name = parts[4].split("(")[0]
+
+                    # 🔎 Controllo se l’indice esiste
+                    cursor.execute(f"SHOW INDEX FROM {table_name}")
+                    existing_indexes = {row[2] for row in cursor.fetchall()}  # row[2] = Key_name
+
+                    if index_name in existing_indexes:
+                        drop_stmt = f"DROP INDEX {index_name} ON {table_name}"
+                        cursor.execute(drop_stmt)
+
 def run_query_times_and_last(cursor, sql, params, repeats, warmups):
     for _ in range(warmups):
         cursor.execute(sql, params)
@@ -246,14 +261,15 @@ def append_summary_row(filename, row):
 # ------------------------------
 # Main benchmark
 # ------------------------------
-def mainMySql():
+def mainMySql(RESULTS_ROOT,use_indexes):
     try:
         conn = mysql.connector.connect(**CONFIG)
         # buffered evita problemi se in futuro iteri sui risultati
         cursor = conn.cursor(buffered=False)
-
-        summary_file = f"results_with_indexes/MySql/{OUTPUT_PREFIX}_summary.csv"
+        apply_mysql_indexes(cursor,use_indexes)
+        summary_file = RESULTS_ROOT / "mysql" / f"{OUTPUT_PREFIX}_summary.csv"      
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        RESULTS_DIR = RESULTS_ROOT / "mysql"
 
         for q in QUERIES:
             name = q["name"]
@@ -270,7 +286,7 @@ def mainMySql():
             print(f"Average: {avg:.2f} ms | StdDev: {stdev:.2f} ms | Min: {min(times_ms):.2f} ms | Max: {max(times_ms):.2f} ms")
 
             # CSV per-run
-            runs_file = f"results_with_indexes/MySql/{OUTPUT_PREFIX}_{name}.csv"
+            runs_file = RESULTS_ROOT / "mysql" / f"{OUTPUT_PREFIX}_{name}.csv"
             save_runs_csv(runs_file, times_ms)
             save_last_result_csv(RESULTS_DIR / f"{name}.csv", header, rows_last)
 

@@ -6,7 +6,6 @@ import csv
 from datetime import datetime
 import os
 import sys
-
 # Connection config (adatta user/password/uri e nome database)
 neo4j_config = {
     "uri": "bolt://localhost:7687",
@@ -17,8 +16,6 @@ neo4j_config = {
 REPEATS = 10
 WARMUP_RUNS = 1
 OUTPUT_PREFIX = "neo4j"
-RESULTS_DIR = Path("results_with_indexes/neo4j")
-
 
 QUERIES = [
     {
@@ -66,7 +63,7 @@ QUERIES = [
         "params": {"uid": 42},
     },
     {
-        "name": "count_how_many_users_vote_>=4_a_couple_of_film",
+        "name": "count_how_many_users_vote_greather_than_4_a_couple_of_film",
         "cypher": """
             WITH 828124615 AS sinceSec, 1537799250 AS untilSec
             MATCH (m1:Movie)<-[r1:RATED]-(u:User)-[r2:RATED]->(m2:Movie)
@@ -117,6 +114,21 @@ indexes_neo4j = {
     ]
 }
 
+def apply_neo4j_indexes(session,use_indexes):
+    for _, stmts in indexes_neo4j.items():
+        for stmt in stmts:
+            if use_indexes:
+                # Eseguo CREATE INDEX
+                session.run(stmt)
+            else:
+                # Estraggo il nome dell’indice per generare DROP
+                parts = stmt.split()
+                # Sintassi tipica: CREATE INDEX index_name ...
+                if len(parts) >= 3 and parts[0].upper() == "CREATE" and parts[1].upper() == "INDEX":
+                    index_name = parts[2]
+                    drop_stmt = f"DROP INDEX {index_name} IF EXISTS"
+                    session.run(drop_stmt)
+
 def run_query_times_and_last(session, cypher, params, repeats, warmups):
     for _ in range(warmups):
         session.run(cypher, params).consume()
@@ -158,13 +170,15 @@ def append_summary_row(filename, row):
             w.writerow(header)
         w.writerow(row)
 
-def mainNeo4j():
+def mainNeo4j(RESULTS_ROOT,use_indexes):
     try:
         driver = GraphDatabase.driver(neo4j_config["uri"], auth=neo4j_config["auth"])
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        summary_file = f"results_with_indexes/Neo4j/{OUTPUT_PREFIX}_summary.csv"
+        RESULTS_DIR = RESULTS_ROOT / "neo4j"
+        summary_file = RESULTS_DIR/ f"{OUTPUT_PREFIX}_summary.csv"
 
         with driver.session(database=neo4j_config["database"]) as session:
+            apply_neo4j_indexes(session,use_indexes)
             for q in QUERIES:
                 name = q["name"]
                 cypher = q["cypher"]
@@ -179,7 +193,7 @@ def mainNeo4j():
                 #print(f"Rows (last run): {rows_last}")
                 print(f"Average: {avg:.2f} ms | StdDev: {stdev:.2f} ms | Min: {min(times_ms):.2f} ms | Max: {max(times_ms):.2f} ms")
 
-                save_runs_csv(f"results_with_indexes/Neo4j/{OUTPUT_PREFIX}_{name}.csv", times_ms)
+                save_runs_csv(RESULTS_ROOT / "neo4j" / f"{OUTPUT_PREFIX}_{name}.csv", times_ms)
                 save_last_result_csv(RESULTS_DIR / f"{name}.csv", header, rows_last)
                 append_summary_row(
                     summary_file,
